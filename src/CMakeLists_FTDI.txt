@@ -1,0 +1,35 @@
+cmake_minimum_required(VERSION 3.16)
+project(FTDITest)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_AUTOMOC ON)
+
+find_package(Qt6 COMPONENTS Core REQUIRED)
+
+# FTDI Interface Library
+add_library(ftdi_interface
+    scpFTDIInterface.h
+    scpFTDIInterface.cpp
+)
+target_link_libraries(ftdi_interface Qt6::Core)
+
+# Test Data Generator
+add_executable(generateTestData
+    generateTestData.cpp
+)
+target_link_libraries(generateTestData Qt6::Core)
+
+# FTDI Test Application
+add_executable(testFTDI
+    testFTDI.cpp
+)
+target_link_libraries(testFTDI 
+    ftdi_interface
+    Qt6::Core
+)
+
+# Installation
+install(TARGETS testFTDI generateTestData
+    RUNTIME DESTINATION bin
+)
