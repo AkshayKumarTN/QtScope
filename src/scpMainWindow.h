@@ -9,6 +9,8 @@
 #include "scpAudioInputSource.h"
 #include "scpSignalGeneratorSource.h"
 #include "scpMessageWaveSource.h"
+#include "scpSimulatedGeneratorSource.h"
+#include "scpSimulatedAcquisitionSource.h"
 #include "scpDataSource.h"
 
 class scpMainWindow : public QMainWindow {
@@ -29,6 +31,9 @@ private slots:
     void onTimebaseChanged(int idx);
     void onScaleChanged(int idx);
     void onGenFreqChanged(double f);
+    void onWaveformTypeChanged(int idx);
+    void onGenAmplitudeChanged(double amp);
+    void onGenOffsetChanged(double offset);
     void onSendMessage();  // NEW: handle send button
 
 private:
@@ -41,7 +46,10 @@ private:
     QPushButton* m_startStop = nullptr;
     QComboBox* m_timebaseCombo = nullptr;
     QComboBox* m_scaleCombo = nullptr;
+    QComboBox* m_waveformCombo = nullptr;
     QDoubleSpinBox* m_genFreq = nullptr;
+    QDoubleSpinBox* m_genAmplitude = nullptr;
+    QDoubleSpinBox* m_genOffset = nullptr;
     QLabel* m_status = nullptr;       // Status label
     QLabel* m_msgLabel = nullptr;     // Message label for command-line messages
     QLineEdit* m_msgInput = nullptr;  // NEW: text input for message
@@ -51,6 +59,8 @@ private:
     scpAudioInputSource* m_audio = nullptr;
     scpSignalGeneratorSource* m_gen = nullptr;
     scpMessageWaveSource* m_msgSource = nullptr;
+    scpSimulatedGeneratorSource* m_simGen = nullptr;
+    scpSimulatedAcquisitionSource* m_simAcq = nullptr;
     scpDataSource* m_current = nullptr;
 
     bool m_running = false;
