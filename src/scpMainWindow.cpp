@@ -23,6 +23,8 @@ scpMainWindow::scpMainWindow(QWidget* parent)
 scpMainWindow::~scpMainWindow() {
     if (m_audio) m_audio->stop();
     if (m_gen) m_gen->stop();
+    if (m_simGen) m_simGen->stop();
+    if (m_simAcq) m_simAcq->stop();
     if (m_msgSource) m_msgSource->stop();
 }
 
@@ -44,6 +46,8 @@ void scpMainWindow::buildUi() {
     m_sourceCombo = new QComboBox(firstRow);
     m_sourceCombo->addItem("Audio In (mic/line)");
     m_sourceCombo->addItem("Signal Generator (sine)");
+    m_sourceCombo->addItem("Simulated Generator");
+    m_sourceCombo->addItem("Simulated Acquisition");
     m_sourceCombo->addItem("Message Waveform");
     connect(m_sourceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &scpMainWindow::onSourceChanged);
@@ -71,6 +75,28 @@ void scpMainWindow::buildUi() {
     connect(m_genFreq, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &scpMainWindow::onGenFreqChanged);
 
+    m_waveformCombo = new QComboBox(firstRow);
+    m_waveformCombo->addItem("Sine");
+    m_waveformCombo->addItem("Square");
+    m_waveformCombo->addItem("Triangle");
+    connect(m_waveformCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &scpMainWindow::onWaveformTypeChanged);
+
+    m_genAmplitude = new QDoubleSpinBox(firstRow);
+    m_genAmplitude->setRange(0.1, 10.0);
+    m_genAmplitude->setDecimals(2);
+    m_genAmplitude->setValue(1.0);
+    connect(m_genAmplitude, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &scpMainWindow::onGenAmplitudeChanged);
+
+    m_genOffset = new QDoubleSpinBox(firstRow);
+    m_genOffset->setRange(-5.0, 5.0);
+    m_genOffset->setDecimals(2);
+    m_genOffset->setValue(0.0);
+    m_genOffset->setSuffix(" V");
+    connect(m_genOffset, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &scpMainWindow::onGenOffsetChanged);
+
     hl1->addWidget(new QLabel("Source:", firstRow));
     hl1->addWidget(m_sourceCombo);
     hl1->addWidget(m_startStop);
@@ -81,8 +107,17 @@ void scpMainWindow::buildUi() {
     hl1->addWidget(new QLabel("Vertical:", firstRow));
     hl1->addWidget(m_scaleCombo);
     hl1->addSpacing(12);
-    hl1->addWidget(new QLabel("Gen Freq:", firstRow));
+    hl1->addWidget(new QLabel("Freq:", firstRow));
     hl1->addWidget(m_genFreq);
+    hl1->addSpacing(12);
+    hl1->addWidget(new QLabel("Waveform:", firstRow));
+    hl1->addWidget(m_waveformCombo);
+    hl1->addSpacing(12);
+    hl1->addWidget(new QLabel("Amp:", firstRow));
+    hl1->addWidget(m_genAmplitude);
+    hl1->addSpacing(12);
+    hl1->addWidget(new QLabel("Offset:", firstRow));
+    hl1->addWidget(m_genOffset);
     hl1->addStretch(1);
 
     // Second row: Message input (only visible for Message Waveform source)
@@ -126,9 +161,11 @@ void scpMainWindow::buildUi() {
     // Data sources
     m_audio = new scpAudioInputSource(this);
     m_gen = new scpSignalGeneratorSource(this);
+    m_simGen = new scpSimulatedGeneratorSource(this);
+    m_simAcq = new scpSimulatedAcquisitionSource(this);
     m_msgSource = new scpMessageWaveSource("HELLO WORLD", 1000, 20); // 20 ms per char default
-    m_view->setSource(m_audio);
-    m_current = m_audio;
+    m_view->setSource(m_simAcq);  // Default to simulated acquisition for standalone
+    m_current = m_simAcq;
 
     onTimebaseChanged(m_timebaseCombo->currentIndex());
     onScaleChanged(m_scaleCombo->currentIndex());
@@ -150,7 +187,19 @@ void scpMainWindow::onSourceChanged(int idx) {
     // Show/hide message input based on source
     QWidget* messageRow = m_controls->property("messageRow").value<QWidget*>();
     if (messageRow) {
-        messageRow->setVisible(idx == 2); // Show only for Message Waveform
+        messageRow->setVisible(idx == 4); // Show only for Message Waveform (index 4)
+    }
+
+    // Show/hide generator controls based on source
+    bool isGenerator = (idx == 1 || idx == 2);  // Signal Generator or Simulated Generator
+    m_waveformCombo->setVisible(isGenerator);
+    m_genAmplitude->setVisible(isGenerator);
+    m_genOffset->setVisible(isGenerator);
+    if (idx == 1) {
+        // Original generator doesn't support waveform type, amplitude, offset
+        m_waveformCombo->setVisible(false);
+        m_genAmplitude->setVisible(false);
+        m_genOffset->setVisible(false);
     }
     
     if (idx == 0) {
@@ -161,7 +210,19 @@ void scpMainWindow::onSourceChanged(int idx) {
         m_view->setSource(m_gen);
         m_current = m_gen;
         m_status->setText("Source: Signal Generator");
-    } else {
+    } else if (idx == 2) {
+        m_view->setSource(m_simGen);
+        m_current = m_simGen;
+        m_status->setText("Source: Simulated Generator");
+        // Apply current settings
+        onWaveformTypeChanged(m_waveformCombo->currentIndex());
+        onGenAmplitudeChanged(m_genAmplitude->value());
+        onGenOffsetChanged(m_genOffset->value());
+    } else if (idx == 3) {
+        m_view->setSource(m_simAcq);
+        m_current = m_simAcq;
+        m_status->setText("Source: Simulated Acquisition");
+    } else if (idx == 4) {
         m_view->setSource(m_msgSource);
         m_current = m_msgSource;
         m_status->setText("Source: Message Waveform");
@@ -199,6 +260,30 @@ void scpMainWindow::onScaleChanged(int idx) {
 
 void scpMainWindow::onGenFreqChanged(double f) {
     if (m_gen) m_gen->setFrequency(f);
+    if (m_simGen) m_simGen->setFrequency(f);
+}
+
+void scpMainWindow::onWaveformTypeChanged(int idx) {
+    if (!m_simGen) return;
+    switch (idx) {
+        case 0:
+            m_simGen->setWaveformType(scpSimulatedGeneratorSource::Sine);
+            break;
+        case 1:
+            m_simGen->setWaveformType(scpSimulatedGeneratorSource::Square);
+            break;
+        case 2:
+            m_simGen->setWaveformType(scpSimulatedGeneratorSource::Triangle);
+            break;
+    }
+}
+
+void scpMainWindow::onGenAmplitudeChanged(double amp) {
+    if (m_simGen) m_simGen->setAmplitude(static_cast<float>(amp));
+}
+
+void scpMainWindow::onGenOffsetChanged(double offset) {
+    if (m_simGen) m_simGen->setOffset(static_cast<float>(offset));
 }
 
 void scpMainWindow::onSendMessage() {
